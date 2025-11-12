@@ -1,0 +1,7 @@
+Name,Beans,Water,Milk,Matcha,Chocolate
+Americano,1,2,0,0,0
+Latte,1,0,2,0,0
+Cappuccino,2,1,1,0,0
+Espresso,2,1,0,0,0
+MatchaLatte,0,0,2,3,0
+HotChoco,0,0,0,0,2

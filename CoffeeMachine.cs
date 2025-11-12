@@ -5,32 +5,23 @@ using System.IO;
 public class CoffeeRecipe
 {
     public string Name { get; }
-    public int Usage_Beans { get; }
-    public int Usage_Water { get; }
-    public int Usage_Milk { get; }
+    public Dictionary<string, int> Usage_Ingredient { get; }
 
-    public CoffeeRecipe(string name, int beans, int water, int milk)
+    public CoffeeRecipe(string name, Dictionary<string,int> ingredients)
     {
         this.Name = name;
-        this.Usage_Beans = beans;
-        this.Usage_Water = water;
-        this.Usage_Milk = milk;
+        this.Usage_Ingredient = ingredients;
     }
 }
 public class CoffeeMachine
 {
-    private int _beans;
-    private int _water;
-    private int _milk;
-
+    private Dictionary<string, int> _stock;
     private Dictionary<string, CoffeeRecipe> _recipes;
+    private List<string> _ingredientHeaders = new List<string>();    
     private const string RecipeFilePath = "recipes.csv";
-    public CoffeeMachine(int beans, int water, int milk)
+    public CoffeeMachine(Dictionary<string, int> Stocks)
     {
-
-        this._beans = beans;
-        this._water = water;
-        this._milk  = milk;
+        this._stock = new Dictionary<string, int>(Stocks);
         try
         {
             this._recipes = LoadRecipesFromFile(RecipeFilePath);
@@ -40,11 +31,12 @@ public class CoffeeMachine
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ERROR] Failed to load recipes file from '{RecipeFilePath}', Check for recipes file ");
+            Console.WriteLine($"[ERROR] Failed to load recipes file from '{RecipeFilePath}', Check for recipes file : {ex}");
             this._recipes = new Dictionary<string, CoffeeRecipe>();
         }
 
-        Console.WriteLine($"Coffee machine ready (Beans: {_beans}, Water: {_water}, Milk: {_milk})");
+        Console.WriteLine($"Coffee machine ready");
+        PrintStock();
     }
     
     private Dictionary<string, CoffeeRecipe> LoadRecipesFromFile(string filePath)
@@ -56,26 +48,50 @@ public class CoffeeMachine
             throw new FileNotFoundException($"Recipe file not found at '{filePath}'.");
         }
 
-        IEnumerable<string> lines = File.ReadLines(filePath).Skip(1);
+        string[] lines = File.ReadAllLines(filePath);
 
-        foreach (string line in lines)
+        if (lines.Length < 2)
+        {
+            throw new InvalidDataException("Recipe files is Empty");
+        }
+
+        string[] headers = lines[0].Split(',');
+
+        _ingredientHeaders = new List<string>(); 
+
+        for (int i = 1; i < headers.Length; i++) 
+        {
+            // 3. 공백을 제거하고 (예: " Beans " -> "Beans")
+            string trimmedHeader = headers[i].Trim(); 
+        
+            // 4. 리스트에 추가합니다.
+            _ingredientHeaders.Add(trimmedHeader);      
+        }
+
+        foreach (string line in lines.Skip(1))
         {
             string[] parts = line.Split(',');
 
             try
             {
-                if (parts.Length != 4)
+                if (parts.Length != headers.Length)
                 {
-                    throw new FormatException("check for recipes file");
+                    throw new FormatException($"Line columns error check for csv file.");
                 }
 
                 string name = parts[0].Trim();
-                int usage_beans = int.Parse(parts[1].Trim());
-                int usage_water = int.Parse(parts[2].Trim());
-                int usage_milk = int.Parse(parts[3].Trim());
+                var usage_ingredients = new Dictionary<string, int>();
 
-                var recipe = new CoffeeRecipe(name, usage_beans, usage_water, usage_milk);
+                for (int i = 0; i < _ingredientHeaders.Count; i++)
+                {
+                    string ingredientName = _ingredientHeaders[i];
+                    // parts[i + 1] : +1은 parts[0]이 "Name"이기 때문입니다.
+                    int usage_amount = int.Parse(parts[i + 1].Trim());
 
+                    usage_ingredients.Add(ingredientName, usage_amount);
+                }
+
+                var recipe = new CoffeeRecipe(name, usage_ingredients);
                 if (!recipes.ContainsKey(name))
                 {
                     recipes.Add(name, recipe);
@@ -83,7 +99,7 @@ public class CoffeeMachine
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[RecipeLoad] Error read recipe line '{line}'.");
+                Console.WriteLine($"[RecipeLoad] Error read recipe line '{line}', {ex}.");
             }
         }
 
@@ -101,27 +117,37 @@ public class CoffeeMachine
             throw new ArgumentException($"'{coffeeType}'is not a supported menu.");
         }
 
-        if (this._beans < recipe.Usage_Beans)
+        foreach (var ingredient in recipe.Usage_Ingredient)
         {
-            throw new InvalidOperationException($"Not enough Beans to make a {coffeeType}.");
-        }
-        if (this._beans < recipe.Usage_Water)
-        {
-            throw new InvalidOperationException($"Not enough Water to make a {coffeeType}.");
-        }
-        if (this._beans < recipe.Usage_Milk)
-        {
-            throw new InvalidOperationException($"Not enough Milk to make a {coffeeType}.");
+            string ingredientName = ingredient.Key;
+            int usageaAmount = ingredient.Value;
+            
+            if (usageaAmount <= 0) continue; 
+
+            if (!_stock.TryGetValue(ingredientName, out int currentStock) || currentStock < usageaAmount)
+            {                
+                throw new InvalidOperationException($"Not enough {ingredientName.ToUpper()} to make a {coffeeType}. (Required: {usageaAmount}, Have: {currentStock})");
+            }
         }
 
         Console.WriteLine($"Starting to make {coffeeType}........");
-        this._beans -= recipe.Usage_Beans;
-        this._water -= recipe.Usage_Water;
-        this._milk -= recipe.Usage_Milk;
+        foreach (var ingrdient in recipe.Usage_Ingredient)
+        {
+            if (ingrdient.Value > 0)
+            {
+                // 재고 딕셔너리에서 필요한 양만큼 차감
+                _stock[ingrdient.Key] -= ingrdient.Value;
+            }
+        }
 
-        Console.WriteLine($"'{coffeeType} is ready! (Remaining ingredients: Beans {_beans}, Water {_water}, Milk {_milk})");
+        Console.WriteLine($"{coffeeType} is ready!");
+        PrintStock(); // 남은 재고 출력
         return coffeeType;
-        
+    }
+    private void PrintStock()
+    {
+        string Status = string.Join(", ", _stock.Select(kv => $"{kv.Key}: {kv.Value}"));
+        Console.WriteLine($"(Current ingredients: {Status})");
     }
 }
 
@@ -131,20 +157,71 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        var machine = new CoffeeMachine(beans: 10, water: 10, milk: 10);
+        const string stockFilePath = "ingredients.csv";
+        Console.WriteLine($"Loading ingredients ...");
+
+        Dictionary<string, int> Stock = LoadIngredientFile(stockFilePath);
+
+        if (Stock.Count == 0)
+        {
+            Console.WriteLine("Ingredients file is empty.");
+            return; 
+        }
+        
+        var machine = new CoffeeMachine(Stock);
         try
         {
             machine.MakeCoffee("Latte");
             machine.MakeCoffee("Americano");
-            machine.MakeCoffee("Cappuccino"); 
-            machine.MakeCoffee("Latte"); 
+            machine.MakeCoffee("Cappuccino");
+            machine.MakeCoffee("HotChoco");
             machine.MakeCoffee("Cappuccino");
             machine.MakeCoffee("Cappuccino"); // Should succeed
-            machine.MakeCoffee("Cappuccino"); // Should fail due to lack of ingredients
+            machine.MakeCoffee("Chocolate"); // Should fail due to lack of ingredients
         }
         catch (Exception ex)
         {
             Console.WriteLine($"An error occurred: {ex.Message}");
         }
+    }
+
+    private static Dictionary<string, int> LoadIngredientFile(string filePath)
+    {
+        var ingredients = new Dictionary<string, int>();
+        if (!File.Exists(filePath))
+        {
+            Console.WriteLine($"[Error] file not found at '{filePath}'.");
+            return ingredients;
+        }
+
+        try
+        {
+            string[] lines = File.ReadAllLines(filePath);
+            string[] headers = lines[0].Split(',');
+            string[] values = lines[1].Split(',');
+
+            if (headers.Length != values.Length)
+            {
+                throw new InvalidDataException($"Check for ingredients.csv file.");
+            }
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                string ingredientName = headers[i].Trim();
+                int amount = int.Parse(values[i].Trim());
+
+                if (!ingredients.ContainsKey(ingredientName))
+                {
+                    ingredients.Add(ingredientName, amount);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Error] read file: {ex.Message}");
+            return new Dictionary<string, int>();
+        }
+
+        return ingredients;
     }
 }
