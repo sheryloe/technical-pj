@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 public class CoffeeRecipe
 {
@@ -23,19 +24,70 @@ public class CoffeeMachine
     private int _milk;
 
     private Dictionary<string, CoffeeRecipe> _recipes;
-
+    private const string RecipeFilePath = "recipes.csv";
     public CoffeeMachine(int beans, int water, int milk)
     {
+
         this._beans = beans;
         this._water = water;
-        this._milk = milk;
+        this._milk  = milk;
+        try
+        {
+            this._recipes = LoadRecipesFromFile(RecipeFilePath);
 
-        _recipes = new Dictionary<string, CoffeeRecipe>();
-        _recipes.Add("Americano", new CoffeeRecipe("Americano", beans: 1, water: 2, milk: 0));
-        _recipes.Add("Latte", new CoffeeRecipe("Latte", beans: 1, water: 0, milk: 2));
-        _recipes.Add("Cappuccino", new CoffeeRecipe("Latte", beans: 2, water: 1, milk: 1));
+            string loadedRecipe = string.Join(", ", _recipes.Keys);
+            Console.WriteLine($"Successfully loaded {_recipes.Count} recipes : {loadedRecipe}.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Failed to load recipes file from '{RecipeFilePath}', Check for recipes file ");
+            this._recipes = new Dictionary<string, CoffeeRecipe>();
+        }
 
         Console.WriteLine($"Coffee machine ready (Beans: {_beans}, Water: {_water}, Milk: {_milk})");
+    }
+    
+    private Dictionary<string, CoffeeRecipe> LoadRecipesFromFile(string filePath)
+    {
+        var recipes = new Dictionary<string, CoffeeRecipe>();
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Recipe file not found at '{filePath}'.");
+        }
+
+        IEnumerable<string> lines = File.ReadLines(filePath).Skip(1);
+
+        foreach (string line in lines)
+        {
+            string[] parts = line.Split(',');
+
+            try
+            {
+                if (parts.Length != 4)
+                {
+                    throw new FormatException("check for recipes file");
+                }
+
+                string name = parts[0].Trim();
+                int usage_beans = int.Parse(parts[1].Trim());
+                int usage_water = int.Parse(parts[2].Trim());
+                int usage_milk = int.Parse(parts[3].Trim());
+
+                var recipe = new CoffeeRecipe(name, usage_beans, usage_water, usage_milk);
+
+                if (!recipes.ContainsKey(name))
+                {
+                    recipes.Add(name, recipe);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RecipeLoad] Error read recipe line '{line}'.");
+            }
+        }
+
+        return recipes;
     }
 
     public string MakeCoffee(string coffeeType)
